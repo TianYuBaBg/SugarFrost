@@ -46,6 +46,8 @@ const state = await page.evaluate(() => {
   return {
     remaining: cards.length,
     unlocked: cards.filter((c) => c.unlocked).length,
+    frosted: cards.filter((c) => c.frostLayers > 0).length,
+    clearPlayable: cards.filter((c) => c.unlocked && c.frostLayers === 0).length,
     slot: scene.slot.length,
     uiScale: scene.uiScale,
     sample: cards.filter((c) => c.unlocked).slice(0, 6).map((c) => ({
@@ -55,13 +57,70 @@ const state = await page.evaluate(() => {
 });
 console.log('state', state);
 
+// ── 阶段 1.5：糖霜机制 —— 点带霜牌不消耗；抽走旁边的牌会融一层 ──
+const frostProbe = await page.evaluate(() => {
+  const scene = window.__game.scene.getScene('GameScene');
+  const frostedList = scene.cards
+    .filter((c) => c.state === 'on_pile' && c.unlocked && c.frostLayers > 0)
+    .sort((a, b) => scene.level.solution.indexOf(a.id) - scene.level.solution.indexOf(b.id));
+
+  for (const frosted of frostedList) {
+    // 从解序里找一张「解序更早、且与它相邻」的牌：抽掉它会融这一张
+    const pos = scene.level.solution.indexOf(frosted.id);
+    const heater = scene.level.solution.slice(0, pos)
+      .map((id) => scene.cardById.get(id))
+      .find((c) => c && c.unlocked && c.frostLayers === 0 && c.state === 'on_pile'
+        && Math.abs(c.lx - frosted.lx) <= 88 && Math.abs(c.ly - frosted.ly) <= 88);
+    if (!heater) continue;
+    return {
+      target: { id: frosted.id, layers: frosted.frostLayers, x: frosted.sprite.x, y: frosted.sprite.y },
+      heater: { id: heater.id, x: heater.sprite.x, y: heater.sprite.y },
+    };
+  }
+  return null;
+});
+
+if (frostProbe) {
+  const before = await page.evaluate(() => {
+    const s = window.__game.scene.getScene('GameScene');
+    return s.cards.filter((c) => c.state === 'on_pile').length;
+  });
+  await page.mouse.click(frostProbe.target.x / 2, frostProbe.target.y / 2);
+  await new Promise((r) => setTimeout(r, 500));
+  const afterFrostClick = await page.evaluate((id) => {
+    const s = window.__game.scene.getScene('GameScene');
+    const c = s.cardById.get(id);
+    return {
+      remaining: s.cards.filter((x) => x.state === 'on_pile').length,
+      layers: c.frostLayers,
+      inSlot: s.slot.some((x) => x.id === id),
+    };
+  }, frostProbe.target.id);
+  const blockedOk = afterFrostClick.remaining === before
+    && afterFrostClick.layers === frostProbe.target.layers
+    && !afterFrostClick.inSlot;
+  console.log(`frost click: 剩余 ${before} → ${afterFrostClick.remaining}, 层数 ${afterFrostClick.layers}, 入槽=${afterFrostClick.inSlot} → ${blockedOk ? 'OK' : 'FAIL'}`);
+
+  if (frostProbe.heater) {
+    await page.screenshot({ path: `${OUT}/frost.png` });
+    await page.mouse.click(frostProbe.heater.x / 2, frostProbe.heater.y / 2);
+    await new Promise((r) => setTimeout(r, 1200));
+    const afterHeat = await page.evaluate((id) => {
+      const s = window.__game.scene.getScene('GameScene');
+      return s.cardById.get(id).frostLayers;
+    }, frostProbe.target.id);
+    console.log(`heat: 相邻牌被抽走后层数 ${frostProbe.target.layers} → ${afterHeat} → ${afterHeat === frostProbe.target.layers - 1 ? 'OK' : 'FAIL'}`);
+    await page.screenshot({ path: `${OUT}/frost-melted.png` });
+  }
+}
+
 // 点三张同类型的可点牌（模拟真实点击）
 let clicks = 0;
 for (let round = 0; round < 6 && state && state.sample.length; round++) {
   const s = await page.evaluate(() => {
     const scene = window.__game.scene.getScene('GameScene');
     if (scene.status !== 'playing' || scene.isAnimating) return null;
-    const pool = scene.cards.filter((c) => c.state === 'on_pile' && c.unlocked);
+    const pool = scene.cards.filter((c) => c.state === 'on_pile' && c.unlocked && c.frostLayers === 0);
     if (!pool.length) return null;
     // 优先选槽里已有同类的牌
     const cnt = new Map();
@@ -100,9 +159,11 @@ const lastThree = await page.evaluate(() => {
     c.state = 'removed';
     if (c.sprite) c.sprite.destroy();
     c.sprite = null;
-    if (c.frost) c.frost.destroy();
     c.frost = null;
+    c.shade = null;
   }
+  // 测试专用：清掉剩余牌的霜，直接验证胜利结算
+  for (const c of scene.cards) c.frostLayers = 0;
   scene.recomputeAll();
   scene.refreshHUD();
   // 按解序排列：最后一张在解序里最晚，才是压在最上面的那张
@@ -135,7 +196,8 @@ await new Promise((r) => setTimeout(r, 1400));
 
 const losePlan = await page.evaluate(() => {
   const scene = window.__game.scene.getScene('GameScene');
-  const pool = scene.cards.filter((c) => c.state === 'on_pile' && c.unlocked);
+  // 只挑「无霜」的牌：本轮验证的是卡槽满 7 的失败路径
+  const pool = scene.cards.filter((c) => c.state === 'on_pile' && c.unlocked && c.frostLayers === 0);
   const byType = new Map();
   for (const c of pool) {
     if (!byType.has(c.type)) byType.set(c.type, []);

@@ -28,9 +28,14 @@ export const PALETTE = {
   inkSoft: 0x9A6B84,
   gold: 0xF2B33D,
 
-  // 冻结遮罩
-  frost: 0xEAF4FF,
-  frostEdge: 0xAECDEB,
+  // 遮挡压暗罩（被压住的牌用它，颜色偏暖紫，避免看起来像结冰）
+  shade: 0x4A2B3E,
+
+  // 糖霜（机制层）：冰壳 + 层数冰点
+  frostShell: 0xF7FBFF,
+  frostRim: 0xBFD9F5,
+  frostDeep: 0x8FB6DE,
+  frostPip: 0x5E86B8,
 
   // 通用
   white: 0xFFFFFF,

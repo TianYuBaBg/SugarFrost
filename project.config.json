@@ -6,7 +6,11 @@
     "postcss": true,
     "minified": false,
     "newFeature": true,
-    "babelSetting": { "ignore": [], "disablePlugins": [], "outputPath": "" },
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    },
     "compileWorklet": false,
     "uglifyFileName": false,
     "uploadWithSourceMap": true,
@@ -24,23 +28,62 @@
   },
   "compileType": "game",
   "libVersion": "2.27.1",
-  "appid": "touristappid",
+  "appid": "wx6fdde619ab09b117",
   "projectname": "SugarFrost",
   "condition": {},
   "packOptions": {
     "ignore": [
-      { "type": "folder", "value": "tools" },
-      { "type": "folder", "value": "docs" },
-      { "type": "folder", "value": "node_modules" },
-      { "type": "folder", "value": ".tmp" },
-      { "type": "file", "value": "package.json" },
-      { "type": "file", "value": "package-lock.json" },
-      { "type": "file", "value": "README.md" },
-      { "type": "file", "value": "index.html" },
-      { "type": "file", "value": ".gitattributes" },
-      { "type": "file", "value": ".gitignore" }
+      {
+        "value": "tools",
+        "type": "folder"
+      },
+      {
+        "value": "docs",
+        "type": "folder"
+      },
+      {
+        "value": "node_modules",
+        "type": "folder"
+      },
+      {
+        "value": ".tmp",
+        "type": "folder"
+      },
+      {
+        "value": "package.json",
+        "type": "file"
+      },
+      {
+        "value": "package-lock.json",
+        "type": "file"
+      },
+      {
+        "value": "README.md",
+        "type": "file"
+      },
+      {
+        "value": "index.html",
+        "type": "file"
+      },
+      {
+        "value": ".gitattributes",
+        "type": "file"
+      },
+      {
+        "value": ".gitignore",
+        "type": "file"
+      },
+      {
+        "value": "project.private.config.json",
+        "type": "file"
+      }
     ],
     "include": []
   },
-  "editorSetting": { "tabIndent": "insertSpaces", "tabSize": 2 }
+  "editorSetting": {
+    "tabIndent": "insertSpaces",
+    "tabSize": 2
+  },
+  "simulatorPluginLibVersion": {},
+  "isGameTourist": false
 }

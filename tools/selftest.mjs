@@ -4,7 +4,7 @@
 // 覆盖：关卡生成合法性、几何并集面积、遮挡判定（全量 vs 增量）、
 //       槽位插入/三连规则、胜负判定，以及随机种子的可解率抽样。
 
-import { CARD_TYPES, CARDS_PER_TYPE, TOTAL_CARDS, CARD_W, CARD_H, SLOT_CAPACITY, PILE_COUNT, PILE_HEIGHT } from '../js/core/config.js';
+import { CARD_TYPES, CARDS_PER_TYPE, TOTAL_CARDS, CARD_W, CARD_H, SLOT_CAPACITY, PILE_COUNT, PILE_HEIGHT, FROST_TARGET_COUNT, FROST_MAX_LAYERS, FROST_LAYER_MIX } from '../js/core/config.js';
 import {
   getPileRegion,
   computeSlotCenters,
@@ -21,6 +21,7 @@ import {
   evaluateOutcome,
 } from '../js/core/rules.js';
 import { generateLevel } from '../js/core/LevelGenerator.js';
+import { rectGap, heatTargets, applyHeat, computeHeatBudget, frostStats } from '../js/core/frost.js';
 
 let failures = 0;
 let checks = 0;
@@ -176,7 +177,86 @@ group('槽位规则', () => {
   ok(evaluateOutcome([{ state: 'removed' }], SLOT_CAPACITY) === 'win', '牌堆空优先判胜');
 });
 
-// ───────────────── 5. 内置通关路线 ─────────────────
+// ───────────────── 5. 糖霜 ─────────────────
+group('糖霜机制', () => {
+  // 两个 76×76 的牌：中心距离 d 时最近距离 = d - 76
+  const card = (id, lx, ly) => ({ id, lx, ly, lw: CARD_W, lh: CARD_H, state: 'on_pile', frostLayers: 0 });
+  const a = card(0, 0, 0);
+  ok(rectGap(a, card(1, 0, 0)) === 0, '完全重叠 → 0');
+  ok(rectGap(a, card(1, 40, 30)) === 0, '部分重叠 → 0');
+  ok(Math.abs(rectGap(a, card(1, 0, 86)) - 10) < 1e-9, '上下相隔 10px');
+  ok(Math.abs(rectGap(a, card(1, 96, 0)) - 20) < 1e-9, '左右相隔 20px');
+  ok(Math.abs(rectGap(a, card(1, 86, 86)) - Math.hypot(10, 10)) < 1e-9, '斜角走欧氏距离');
+
+  // 受热目标：只取存活、非自己、距离 ≤ 12
+  const src = card(9, 300, 300);
+  const near = card(10, 300, 386);   // 10px
+  const far = card(11, 300, 400);    // 24px
+  const gone = card(12, 300, 380);
+  gone.state = 'removed';
+  const pool = [src, near, far, gone];
+  const hit = heatTargets(pool, src).map((c) => c.id);
+  ok(hit.length === 1 && hit[0] === 10, '受热目标只含贴着的存活牌', hit.join(','));
+
+  // 扣层：逐层降、不越界、返回变化
+  const c3 = card(20, 0, 0); c3.frostLayers = 2;
+  const c0 = card(21, 0, 0); c0.frostLayers = 0;
+  const changes = applyHeat([c3, c0], [20, 21]);
+  ok(c3.frostLayers === 1, '两层 → 一层');
+  ok(c0.frostLayers === 0, '零层不会变负');
+  ok(changes.length === 1 && changes[0].from === 2 && changes[0].to === 1, '变化表正确');
+
+  // 生成器：数量 / 分布 / 预算约束
+  const seeds = [20261108, 3000, 4242, 777];
+  let allGood = true;
+  let distAll = [0, 0, 0, 0];
+  let minClearPlayable = Infinity;
+  for (const seed of seeds) {
+    const lv = generateLevel(seed);
+    const st = frostStats(lv.cards);
+    distAll = distAll.map((v, i) => v + st.dist[i]);
+    const budget = computeHeatBudget(lv.cards, lv.solution);
+    if (st.frosted !== FROST_TARGET_COUNT) allGood = false;
+    for (const c of lv.cards) {
+      if (c.frostLayers > FROST_MAX_LAYERS) allGood = false;
+      if (c.frostLayers > (budget.get(c.id) || 0)) allGood = false; // 预算内必然化得完
+    }
+    // 开局至少要有一批「没被压住、也没霜」的牌可点
+    const occlusion = new Map(resolveOcclusion(lv.cards).map((r) => [r.id, r.unlocked]));
+    const clearPlayable = lv.cards.filter((c) => occlusion.get(c.id) && c.frostLayers === 0).length;
+    minClearPlayable = Math.min(minClearPlayable, clearPlayable);
+  }
+  ok(allGood, `${seeds.length} 个种子：带霜 ${FROST_TARGET_COUNT} 张、层数 ≤ 预算`);
+  ok(distAll[1] === FROST_LAYER_MIX[0] * seeds.length
+    && distAll[2] === FROST_LAYER_MIX[1] * seeds.length
+    && distAll[3] === FROST_LAYER_MIX[2] * seeds.length,
+    `层级配额 1/2/3 层 = ${FROST_LAYER_MIX.join('/')}`, distAll.join('/'));
+  ok(minClearPlayable >= 6, '开局至少 6 张「无霜且可点」', `最少 ${minClearPlayable} 张`);
+
+  // 照解序 T 走：每张牌轮到它时霜必须已经化完
+  for (const seed of seeds) {
+    const lv = generateLevel(seed);
+    const sim = lv.cards.map((c) => ({ ...c }));
+    const byId = new Map(sim.map((c) => [c.id, c]));
+    let blocked = 0;
+    let melts = 0;
+    for (const id of lv.solution) {
+      const c = byId.get(id);
+      if (c.frostLayers !== 0) blocked++;
+      c.state = 'removed';
+      const targets = heatTargets(sim, c);
+      const changed = applyHeat(sim, targets.map((t) => t.id));
+      melts += changed.length;
+    }
+    const leftover = sim.filter((c) => c.frostLayers > 0).length;
+    ok(blocked === 0, `seed ${seed}：解序里没有「还带霜」的牌`, `${blocked} 张被霜挡住`);
+    ok(leftover === 0, `seed ${seed}：走完解序后霜全部化完`, `剩 ${leftover} 张`);
+    ok(melts > 0, `seed ${seed}：过程中确实发生了融霜`, `${melts} 次`);
+  }
+  console.log(`  开局「无霜可点」最少 ${minClearPlayable} 张`);
+});
+
+// ───────────────── 6. 内置通关路线 ─────────────────
 group('内置通关路线（生成器保证有解）', () => {
   const playSolution = (seed) => {
     const level = generateLevel(seed);

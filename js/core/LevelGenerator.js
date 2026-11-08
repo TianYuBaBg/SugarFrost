@@ -21,6 +21,7 @@ import {
   SCATTER_LAYERS,
 } from './config.js';
 import { getPileRegion, isUnlocked } from './rules.js';
+import { assignFrost } from './frost.js';
 import { makeRng } from './rng.js';
 
 const ANCHOR_JITTER = 15;   // 摞心在 3×2 网格上的随机偏移（逻辑像素）
@@ -124,13 +125,16 @@ function assignTypes(layoutCards, order, rng) {
 }
 
 // 生成一局：返回 { seed, cards, maxZ, solution }
-// 每张卡：{ id, type, lx, ly, lw, lh, zLayer, angle, state }
+// 每张卡：{ id, type, lx, ly, lw, lh, zLayer, angle, state, frostLayers }
 export function generateLevel(seed = Date.now()) {
   const rng = makeRng(seed);
 
   const { cards, maxZ } = layoutCards(rng);
   const order = computeRemovalOrder(cards, rng);
   assignTypes(cards, order, rng);
+
+  // 糖霜：沿 T 预算受热次数，保证带霜牌在轮到它之前必然化完
+  assignFrost(cards, order, rng);
 
   return { seed, cards, maxZ, solution: order };
 }

@@ -44,6 +44,12 @@ export const CARD_SHADOW_PAD = 9;   // 烘焙贴图时给投影留的边距（�
 // ───────────────── 遮挡判定 ─────────────────
 export const OCCLUSION_THRESHOLD = 0.05; // 被覆盖面积超过 5% 即视为被压住
 
+// ───────────────── 糖霜机制 ─────────────────
+export const FROST_MAX_LAYERS = 3;      // 单张牌最多几层霜
+export const FROST_HEAT_GAP = 12;       // 抽走一张牌时，矩形最近距离 ≤ 12px 的牌受热
+export const FROST_TARGET_COUNT = 36;   // 目标带霜牌数（108 的 1/3）
+export const FROST_LAYER_MIX = [16, 12, 8]; // [1 层, 2 层, 3 层] 的配额，合计 36 张 / 68 层
+
 // ───────────────── 牌堆混合堆叠参数（1:1 复刻 day-04） ─────────────────
 export const PILE_COUNT = 6;         // 6 摞
 export const PILE_HEIGHT = 10;       // 每摞 10 张 → 60 张，剩 48 张散卡

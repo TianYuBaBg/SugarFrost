@@ -2,16 +2,18 @@
 //
 // 流程：
 //   1. 生成 108 张糖牌（6 摞 × 10 张 + 48 张散卡），保证存在通关路线
-//   2. 5% 阈值的遮挡判定决定哪些牌可点（被压住的牌盖一层霜）
-//   3. 点击可点的牌 → 飞入底部 7 格托盘
-//   4. 槽内同类型自动聚合，连续 3 张同类型立即消除并左对齐
-//   5. 槽满 7 张 → 失败；牌堆清空 → 胜利
+//   2. 5% 阈值的遮挡判定决定哪些牌够得着（被压住的牌压暗）
+//   3. 带霜的牌要先化霜：抽走一张牌会给它周围的牌各融一层（接触受热）
+//   4. 点击可点的牌 → 飞入底部 7 格托盘
+//   5. 槽内同类型自动聚合，连续 3 张同类型立即消除并左对齐
+//   6. 槽满 7 张 → 失败；牌堆清空 → 胜利
 
 import {
   TOTAL_CARDS,
   CANDIES,
   CARD_W,
   CARD_H,
+  FROST_MAX_LAYERS,
   SLOT_CAPACITY,
   SLOT_CELL_W,
   LEVEL_LOGICAL_W,
@@ -34,6 +36,7 @@ import {
   computeInsertIndex,
   findTripleIndex,
 } from '../core/rules.js';
+import { heatTargets, applyHeat } from '../core/frost.js';
 import { generateLevel } from '../core/LevelGenerator.js';
 import { bakeCardTextures, CARD_TEX_DISPLAY } from '../art/CardArt.js';
 import { bakeEnvironment, TRAY_TEX_W, TRAY_TEX_H, PANEL_TEX_W, PANEL_TEX_H } from '../art/EnvironmentArt.js';
@@ -66,7 +69,16 @@ export class GameScene extends Phaser.Scene {
       seedParam = Number(new URLSearchParams(window.location.search).get('seed'));
     }
     this.level = generateLevel(seedParam > 0 ? seedParam : Date.now());
-    this.cards = this.level.cards.map((c) => ({ ...c, state: 'on_pile', unlocked: false, sprite: null, frost: null }));
+    this.cards = this.level.cards.map((c) => ({
+      ...c,
+      state: 'on_pile',
+      unlocked: false,
+      sprite: null,
+      shade: null,
+      frost: null,
+      frostLayers: c.frostLayers || 0,
+    }));
+    this.cardById = new Map(this.cards.map((c) => [c.id, c]));
     this.slot = [];
     this.status = 'playing';
     this.isAnimating = false;
@@ -133,7 +145,7 @@ export class GameScene extends Phaser.Scene {
       padding: { x: this.s(16), y: this.s(6) },
     }).setOrigin(0.5).setDepth(20);
 
-    this.hudHint = this.add.text(WIDTH / 2, safe + this.s(HUD_HINT_Y), '三张同款自动消除 · 槽满 7 张失败', {
+    this.hudHint = this.add.text(WIDTH / 2, safe + this.s(HUD_HINT_Y), '三张同款消除 · 抽牌给周围融霜 · 槽满 7 张失败', {
       fontFamily: titleFont,
       fontSize: `${Math.round(this.s(20))}px`,
       color: hex(PALETTE.inkSoft),
@@ -166,17 +178,24 @@ export class GameScene extends Phaser.Scene {
       const face = this.add.image(0, 0, key);
       face.setDisplaySize(this.s(CARD_TEX_DISPLAY), this.s(CARD_TEX_DISPLAY));
 
-      const frost = this.add.image(0, 0, 'frost');
+      // 被压住 → 压暗罩（不含冰）
+      const shade = this.add.image(0, 0, 'shade');
+      shade.setDisplaySize(this.s(CARD_W), this.s(CARD_H));
+      shade.setVisible(false);
+
+      // 带霜 → 冰壳 + 右上角层数数字（与遮挡无关）
+      const frost = this.add.image(0, 0, `frost${Math.min(FROST_MAX_LAYERS, Math.max(1, card.frostLayers || 1))}`);
       frost.setDisplaySize(this.s(CARD_W), this.s(CARD_H));
       frost.setVisible(false);
 
-      const wrap = this.add.container(this.sx(card.lx), this.sy(card.ly), [face, frost]);
+      const wrap = this.add.container(this.sx(card.lx), this.sy(card.ly), [face, shade, frost]);
       wrap.setAngle(card.angle);
       wrap.setSize(this.s(CARD_W), this.s(CARD_H));
       wrap.setDepth(card.zLayer * 1000 + card.id);
       wrap.setAlpha(0);
 
       card.sprite = wrap;
+      card.shade = shade;
       card.frost = frost;
       this.cardContainers.push(wrap);
     }
@@ -227,8 +246,8 @@ export class GameScene extends Phaser.Scene {
 
   // ──────────────── 遮挡 ────────────────
   recomputeAll() {
-    const results = resolveOcclusion(this.cards);
-    this.applyOcclusion(results);
+    this.applyOcclusion(resolveOcclusion(this.cards));
+    for (const card of this.cards) this.syncFrost(card);
   }
 
   applyOcclusion(results) {
@@ -237,8 +256,28 @@ export class GameScene extends Phaser.Scene {
       const card = byId.get(r.id);
       if (!card) continue;
       card.unlocked = r.unlocked;
-      if (card.frost) card.frost.setVisible(!r.unlocked);
+      if (card.shade) card.shade.setVisible(!r.unlocked);
     }
+  }
+
+  // 把一张牌的「带霜层数」同步到冰壳贴图与显隐
+  syncFrost(card) {
+    if (!card.frost) return;
+    const layers = card.frostLayers || 0;
+    if (layers <= 0) {
+      card.frost.setVisible(false);
+      return;
+    }
+    const key = `frost${Math.min(FROST_MAX_LAYERS, layers)}`;
+    if (card.frost.texture.key !== key) card.frost.setTexture(key);
+    card.frost.setDisplaySize(this.s(CARD_W), this.s(CARD_H));
+    card.frost.setVisible(true);
+    card.frost.setAlpha(1);
+    card.frost.setScale(1);
+  }
+
+  hideFrost(card) {
+    if (card.frost) card.frost.setVisible(false);
   }
 
   // ──────────────── 点击 ────────────────
@@ -250,7 +289,25 @@ export class GameScene extends Phaser.Scene {
       this.nudge(card);
       return;
     }
+    if ((card.frostLayers || 0) > 0) {
+      this.nudge(card);
+      this.flashFrost(card);
+      return;
+    }
     this.pickCard(card);
+  }
+
+  // 点到冰壳：闪一下，告诉玩家「是被冻住，不是没点中」
+  flashFrost(card) {
+    if (!card.frost || !card.frost.visible) return;
+    this.tweens.add({
+      targets: card.frost,
+      alpha: { from: 1, to: 0.45 },
+      duration: 90,
+      yoyo: true,
+      repeat: 1,
+      ease: 'Quad.easeOut',
+    });
   }
 
   nudge(card) {
@@ -273,12 +330,16 @@ export class GameScene extends Phaser.Scene {
     // 移走这张牌后，只有它下面被压住的牌可能解锁
     const dirty = occludedBy(this.cards, card);
 
+    // 取牌即升温：原位置周围一圈各融一层（被压住的也受热）
+    this.meltAround(card);
+
     const index = computeInsertIndex(this.slot, card.type);
     const target = this.slotCenters[Math.min(index, SLOT_CAPACITY - 1)];
 
     const wrap = card.sprite;
     wrap.setDepth(FLYING_DEPTH);
-    if (card.frost) card.frost.setVisible(false);
+    if (card.shade) card.shade.setVisible(false);
+    this.hideFrost(card);
 
     this.tweens.add({
       targets: wrap,
@@ -294,6 +355,49 @@ export class GameScene extends Phaser.Scene {
         this.relayoutSlot(ANIM_SLOT_SHIFT);
         this.time.delayedCall(ANIM_SLOT_SHIFT, () => this.checkTriple(dirty));
       },
+    });
+  }
+
+  // ──────────────── 融霜 ────────────────
+  meltAround(source) {
+    const targets = heatTargets(this.cards, source);
+    if (!targets.length) return;
+    const changes = applyHeat(this.cards, targets.map((c) => c.id));
+    for (const ch of changes) {
+      const card = this.cardById.get(ch.id);
+      if (card) this.animateMelt(card, ch);
+    }
+    if (changes.length) this.refreshHUD();
+  }
+
+  animateMelt(card, { to }) {
+    if (!card.frost) {
+      this.syncFrost(card);
+      return;
+    }
+    if (to <= 0) {
+      // 冰壳碎裂淡出
+      this.tweens.add({
+        targets: card.frost,
+        alpha: 0,
+        scale: 1.16,
+        duration: 240,
+        ease: 'Quad.easeOut',
+        onComplete: () => {
+          card.frost.setScale(1);
+          this.syncFrost(card);
+        },
+      });
+      return;
+    }
+    card.frost.setAlpha(1);
+    card.frost.setScale(1);
+    this.syncFrost(card);
+    this.tweens.add({
+      targets: card.frost,
+      scale: { from: 1.1, to: 1 },
+      duration: 150,
+      ease: 'Back.easeOut',
     });
   }
 
@@ -385,8 +489,9 @@ export class GameScene extends Phaser.Scene {
 
   refreshHUD() {
     const remaining = this.cards.filter((c) => c.state === 'on_pile').length;
+    const frosted = this.cards.filter((c) => c.state === 'on_pile' && (c.frostLayers || 0) > 0).length;
     if (this.hudStatus) {
-      this.hudStatus.setText(`剩余 ${remaining} 张 · 已消 ${this.triplesCleared} 组`);
+      this.hudStatus.setText(`剩余 ${remaining} 张 · 已消 ${this.triplesCleared} 组 · 霜 ${frosted}`);
     }
   }
 

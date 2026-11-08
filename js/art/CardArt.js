@@ -1,7 +1,14 @@
 // 卡面贴图：用 Graphics 画出「糖牌」，再 generateTexture() 烘焙成贴图。
-// 每类糖一张正面贴图 + 一张共用的「冻结」遮罩（被压住时叠在卡面上）。
+// 每类糖一张正面贴图，另有共用的「压暗罩」（被压住）与三等「冰壳」（带霜）。
 
-import { CARD_W, CARD_H, CARD_RADIUS, CARD_SHADOW_PAD, CANDIES } from '../core/config.js';
+import {
+  CARD_W,
+  CARD_H,
+  CARD_RADIUS,
+  CARD_SHADOW_PAD,
+  CANDIES,
+  FROST_MAX_LAYERS,
+} from '../core/config.js';
 import { PALETTE, lighten, darken } from './palette.js';
 import { Pen } from './draw.js';
 
@@ -197,20 +204,90 @@ function drawCandyIcon(pen, candy, cx, cy) {
   }
 }
 
-function drawFrost(pen) {
-  // 被压住的卡：半透明霜层，底下的糖仍隐约可见
-  pen.rrect(0, 0, CARD_W, CARD_H, CARD_RADIUS, PALETTE.frost, 0.55);
-  pen.rrect(3, 3, CARD_W - 6, CARD_H - 6, CARD_RADIUS - 2, PALETTE.frostEdge, 0.22);
-  pen.rrectStroke(0.6, 0.6, CARD_W - 1.2, CARD_H - 1.2, CARD_RADIUS, 1.1, PALETTE.frostEdge, 0.45);
-  // 斜向冰纹（很淡，像结霜）
-  pen.segment(6, CARD_H - 12, CARD_W - 10, 10, 6, 0xffffff, 0.22);
-  pen.segment(12, CARD_H - 4, CARD_W - 4, 22, 3, 0xffffff, 0.16);
-  // 四角霜点
-  const dots = [[9, 11, 2.0], [CARD_W - 11, 14, 1.6], [14, CARD_H - 14, 1.6], [CARD_W - 12, CARD_H - 10, 2.0]];
-  for (const [x, y, r] of dots) pen.circle(x, y, r, 0xffffff, 0.7);
-  // 中央小冰晶
-  pen.segment(CARD_W / 2 - 5, CARD_H / 2, CARD_W / 2 + 5, CARD_H / 2, 1.4, 0xffffff, 0.5);
-  pen.segment(CARD_W / 2, CARD_H / 2 - 5, CARD_W / 2, CARD_H / 2 + 5, 1.4, 0xffffff, 0.5);
+// 被压住：压暗 + 去光，刻意不含任何冰晶元素，免得和「结霜」混淆
+// alpha 压得很轻（0.10）：既能看出「暗了一档」，又保留糖的辨识度
+function drawShade(pen) {
+  pen.rrect(0, 0, CARD_W, CARD_H, CARD_RADIUS, PALETTE.shade, 0.10);
+  pen.rrectStroke(0.7, 0.7, CARD_W - 1.4, CARD_H - 1.4, CARD_RADIUS, 1.4, PALETTE.shade, 0.16);
+}
+
+// 一颗小冰晶：三条 60° 交叉的短线段
+function crystal(pen, cx, cy, len, alpha) {
+  for (let i = 0; i < 3; i++) {
+    const a = (i * Math.PI) / 3;
+    const dx = Math.cos(a) * len;
+    const dy = Math.sin(a) * len;
+    pen.segment(cx - dx, cy - dy, cx + dx, cy + dy, 1.5, 0xffffff, alpha);
+  }
+}
+
+// 用 7 段数码管的笔段画 2/3（1 单独画），比拼小圆点更易读，也不用创建 Text 对象
+const SEGMENTS = {
+  2: ['a', 'b', 'g', 'e', 'd'],
+  3: ['a', 'b', 'g', 'c', 'd'],
+};
+
+function drawDigit(pen, cx, cy, digit, color = PALETTE.frostPip) {
+  const xL = cx - 3.1;
+  const xR = cx + 3.1;
+  const yT = cy - 4.4;
+  const yM = cy;
+  const yB = cy + 4.4;
+
+  // 「1」单独画：居中的竖杠 + 左上小撇（用 7 段写法会像 7）
+  if (digit === 1) {
+    pen.segment(cx, yT, cx, yB, 2.2, color, 1);
+    pen.segment(cx - 2.6, yT + 2.6, cx, yT, 2.0, color, 1);
+    return;
+  }
+
+  const seg = {
+    a: [xL, yT, xR, yT],
+    b: [xR, yT, xR, yM],
+    c: [xR, yM, xR, yB],
+    d: [xL, yB, xR, yB],
+    e: [xL, yM, xL, yB],
+    f: [xL, yT, xL, yM],
+    g: [xL, yM, xR, yM],
+  };
+  for (const key of SEGMENTS[digit] || []) {
+    const [x1, y1, x2, y2] = seg[key];
+    pen.segment(x1, y1, x2, y2, 2.0, color, 1);
+  }
+}
+
+// 带霜：冰壳只压在「边缘与四角」，中央留清，保证糖的种类一眼可辨
+function drawFrostShell(pen, layers) {
+  // 1) 极淡的整体冷色罩（0.18，几乎不影响辨识，但能看出「蒙了一层」）
+  pen.rrect(0, 0, CARD_W, CARD_H, CARD_RADIUS, PALETTE.frostShell, 0.18);
+
+  // 2) 四角结冰：三层三角叠出柔和的霜沿
+  const corner = (x, y, dx, dy) => {
+    const layers3 = [[27, 0.14], [20, 0.26], [12, 0.5]];
+    for (const [c, a] of layers3) {
+      pen.triangle(x, y, x + dx * c, y, x, y + dy * c, 0xffffff, a);
+    }
+  };
+  corner(0, 0, 1, 1);
+  corner(CARD_W, 0, -1, 1);
+  corner(0, CARD_H, 1, -1);
+  corner(CARD_W, CARD_H, -1, -1);
+
+  // 3) 冰缘：内圈一道亮边 + 外圈冷色描边
+  pen.rrectStroke(2.4, 2.4, CARD_W - 4.8, CARD_H - 4.8, CARD_RADIUS - 2, 4.5, 0xffffff, 0.30);
+  pen.rrectStroke(0.9, 0.9, CARD_W - 1.8, CARD_H - 1.8, CARD_RADIUS, 1.9, PALETTE.frostRim, 0.78);
+
+  // 4) 冰晶点缀（避开中央的糖）
+  crystal(pen, 13, CARD_H * 0.55, 5.2, 0.75);
+  crystal(pen, CARD_W - 12, CARD_H * 0.62, 4.2, 0.6);
+
+  // 5) 层数徽标：深蓝底 + 白数字（对比度最高）
+  const bx = CARD_W - 15;
+  const by = 16;
+  pen.circle(bx, by + 0.8, 10.2, 0x2F4B6B, 0.18);
+  pen.circle(bx, by, 10.2, PALETTE.frostDeep, 1);
+  pen.circleStroke(bx, by, 10.2, 1.6, 0xffffff, 0.92);
+  drawDigit(pen, bx, by, layers, 0xffffff);
 }
 
 // ───────────────── 烘焙入口 ─────────────────
@@ -228,11 +305,22 @@ export function bakeCardTextures(scene) {
     g.destroy();
   }
 
-  if (!scene.textures.exists('frost')) {
+  if (!scene.textures.exists('shade')) {
     const g = scene.make.graphics({ x: 0, y: 0, add: false });
     const pen = new Pen(g, SS);
-    drawFrost(pen);
-    g.generateTexture('frost', CARD_W * SS, CARD_H * SS);
+    drawShade(pen);
+    g.generateTexture('shade', CARD_W * SS, CARD_H * SS);
+    g.destroy();
+  }
+
+  // 带霜：每个层数一张冰壳（右上角数字不同）
+  for (let layers = 1; layers <= FROST_MAX_LAYERS; layers++) {
+    const key = `frost${layers}`;
+    if (scene.textures.exists(key)) continue;
+    const g = scene.make.graphics({ x: 0, y: 0, add: false });
+    const pen = new Pen(g, SS);
+    drawFrostShell(pen, layers);
+    g.generateTexture(key, CARD_W * SS, CARD_H * SS);
     g.destroy();
   }
 }
