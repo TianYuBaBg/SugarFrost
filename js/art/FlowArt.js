@@ -78,8 +78,9 @@ export function bakeFlowFrost(scene, layers) {
   const S = FLOW_TEX;
   const R = S * 0.24;
 
-  pen.rrect(0, 0, S, S, R, PALETTE.frostShell, 0.7);
-  pen.rrectStroke(2.6, 2.6, S - 5.2, S - 5.2, R - 1.5, 5.2, PALETTE.frostRim, 0.95);
+  pen.rrect(0, 0, S, S, R, PALETTE.frostShell, 0.82);
+  pen.rrect(0, 0, S, S, R, PALETTE.frostDeep, 0.1);
+  pen.rrectStroke(2.8, 2.8, S - 5.6, S - 5.6, R - 1.6, 5.6, PALETTE.frostRim, 1);
   pen.rrectStroke(0.6, 0.6, S - 1.2, S - 1.2, R, 1.6, PALETTE.frostDeep, 0.35);
   pen.rrectStroke(S * 0.1, S * 0.1, S * 0.8, S * 0.8, R * 0.7, 2.4, PALETTE.white, 0.55);
 

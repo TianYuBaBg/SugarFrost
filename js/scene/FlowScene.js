@@ -200,7 +200,7 @@ export class FlowScene extends Phaser.Scene {
     const g = this.pipeG;
     g.clear();
 
-    const width = this.cell * 0.58;
+    const width = this.cell * 0.54;
     const r = width / 2;
     const drop = this.s(2.2);
 
@@ -227,9 +227,9 @@ export class FlowScene extends Phaser.Scene {
       }
 
       // 高光：只在左上侧一条细亮线，别盖住管道中心
-      const hiW = this.cell * 0.14;
+      const hiW = this.cell * 0.18;
       const hi = pts.map((p) => ({ x: p.x - width * 0.2, y: p.y - width * 0.26 }));
-      g.lineStyle(hiW, 0xffffff, 0.5);
+      g.lineStyle(hiW, 0xffffff, 0.42);
       this.strokeChain(g, hi);
     }
   }
