@@ -10,6 +10,8 @@
     "solve": "node tools/solver.mjs 20",
     "check": "node tools/browser-check.mjs",
     "play": "node tools/playthrough.mjs",
+    "wx:open": "\"/c/Program Files (x86)/Tencent/微信web开发者工具/cli.bat\" open --project .",
+    "wx:preview": "\"/c/Program Files (x86)/Tencent/微信web开发者工具/cli.bat\" preview --project . --qr-output .tmp/wx-preview.png",
     "flow": "node tools/flow-selftest.mjs",
     "flow-check": "node tools/flow-check.mjs"
   },
@@ -22,6 +24,7 @@
   ],
   "license": "MIT",
   "devDependencies": {
+    "miniprogram-automator": "^0.13.0",
     "puppeteer-core": "^25.16.0"
   }
 }

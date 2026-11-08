@@ -13,6 +13,7 @@ import { bakeEnvironment, PANEL_TEX_W, PANEL_TEX_H } from '../art/EnvironmentArt
 import { bakeFlowTextures, syrupOf } from '../art/FlowArt.js';
 import { PALETTE, hex } from '../art/palette.js';
 import { WIDTH, HEIGHT } from '../viewport.js';
+import { readKey, writeKey } from '../storage.js';
 
 const LOGICAL_W = 720;
 const LOGICAL_H = 1280;
@@ -67,19 +68,15 @@ export class FlowScene extends Phaser.Scene {
     this.input.on('pointerupoutside', this.handleUp, this);
 
     if (typeof window !== 'undefined') window.__flow = this;
+    if (typeof GameGlobal !== 'undefined') GameGlobal.__flow = this;
   }
 
   tutorialDone() {
-    try {
-      if (typeof localStorage !== 'undefined') return localStorage.getItem(TUTORIAL_KEY) === '1';
-    } catch (e) { /* 隐私模式忽略 */ }
-    return false;
+    return readKey(TUTORIAL_KEY) === '1';
   }
 
   markTutorialDone() {
-    try {
-      if (typeof localStorage !== 'undefined') localStorage.setItem(TUTORIAL_KEY, '1');
-    } catch (e) { /* 忽略 */ }
+    writeKey(TUTORIAL_KEY, '1');
   }
 
   readParams() {
@@ -90,23 +87,15 @@ export class FlowScene extends Phaser.Scene {
   }
 
   hasSavedLevel() {
-    try {
-      if (typeof localStorage !== 'undefined') return localStorage.getItem(LEVEL_KEY) !== null;
-    } catch (e) { /* 忽略 */ }
-    return false;
+    return readKey(LEVEL_KEY) !== null;
   }
 
   loadLevel() {
-    try {
-      if (typeof localStorage !== 'undefined') return Number(localStorage.getItem(LEVEL_KEY)) || 1;
-    } catch (e) { /* 隐私模式忽略 */ }
-    return 1;
+    return Number(readKey(LEVEL_KEY)) || 1;
   }
 
   saveLevel(level) {
-    try {
-      if (typeof localStorage !== 'undefined') localStorage.setItem(LEVEL_KEY, String(level));
-    } catch (e) { /* 忽略 */ }
+    writeKey(LEVEL_KEY, level);
   }
 
   // ──────────────── 静态层 ────────────────

@@ -33,6 +33,8 @@ export class FlowMain {
     }
 
     this.game = new Phaser.Game(config);
+    // 调试用句柄：浏览器 window / 小游戏 GameGlobal 都能拿到
     if (typeof window !== 'undefined') window.__flowGame = this.game;
+    if (typeof GameGlobal !== 'undefined') GameGlobal.__flowGame = this.game;
   }
 }
