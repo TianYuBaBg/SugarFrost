@@ -59,6 +59,7 @@ export class FlowScene extends Phaser.Scene {
       || (!this.startLevel && !params.get('level') && !saved && !this.tutorialDone());
     if (this.tutorial) this.level = 0;
 
+    this.buttons = [];
     this.buildStatic();
     this.buildLevel();
 
@@ -164,6 +165,24 @@ export class FlowScene extends Phaser.Scene {
       x: this.sx(this.boardX + cell.x * this.cell + this.cell / 2),
       y: this.sy(this.boardY + cell.y * this.cell + this.cell / 2),
     };
+  }
+
+  // 按钮统一走场景级命中测试：Phaser 的 GameObject 命中在小游戏端偶发不响应，
+  // 而场景 pointerdown 一直是可靠的（拖管道本身就是这么做的）
+  registerButton(container, w, h, onClick) {
+    this.buttons.push({ c: container, w, h, onClick });
+  }
+
+  hitButtons(pointer) {
+    for (let i = this.buttons.length - 1; i >= 0; i -= 1) {
+      const b = this.buttons[i];
+      if (!b.c || !b.c.active || !b.c.visible) continue;
+      if (Math.abs(pointer.x - b.c.x) <= b.w / 2 && Math.abs(pointer.y - b.c.y) <= b.h / 2) {
+        b.onClick();
+        return true;
+      }
+    }
+    return false;
   }
 
   drawEndpoints() {
@@ -325,9 +344,7 @@ export class FlowScene extends Phaser.Scene {
     }).setOrigin(0.5);
     c.add([bg, txt]);
     c.setSize(w, h);
-    c.setInteractive(new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h), Phaser.Geom.Rectangle.Contains);
-    c.on('pointerdown', (pointer, px, py, event) => {
-      if (event && event.stopPropagation) event.stopPropagation();
+    this.registerButton(c, w, h, () => {
       if (this.tutorial) this.leaveTutorial();
       else this.scene.restart({ tutorial: true });
     });
@@ -353,11 +370,7 @@ export class FlowScene extends Phaser.Scene {
       }).setOrigin(0.5);
       c.add([bg, txt]);
       c.setSize(w, h);
-      c.setInteractive(new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h), Phaser.Geom.Rectangle.Contains);
-      c.on('pointerdown', (pointer, x, y2, event) => {
-        if (event && event.stopPropagation) event.stopPropagation();
-        onClick();
-      });
+      this.registerButton(c, w, h, onClick);
       return c;
     };
 
@@ -521,8 +534,7 @@ export class FlowScene extends Phaser.Scene {
     }).setOrigin(0.5);
     c.add([bg, txt]);
     c.setSize(w, h);
-    c.setInteractive(new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h), Phaser.Geom.Rectangle.Contains);
-    c.on('pointerdown', () => this.leaveTutorial());
+    this.registerButton(c, w, h, () => this.leaveTutorial());
     this.tutorialPanel = c;
   }
 
@@ -542,6 +554,7 @@ export class FlowScene extends Phaser.Scene {
   }
 
   handleDown(pointer) {
+    if (this.hitButtons(pointer)) return;
     if (this.status !== 'playing') return;
     const cell = this.cellAt(pointer);
     if (!cell) return;
@@ -792,6 +805,7 @@ export class FlowScene extends Phaser.Scene {
   }
 
   showPanel() {
+    this.buttons = [];
     const depth = 9000;
     this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x3a2331, 0.45).setOrigin(0).setDepth(depth);
 
@@ -832,8 +846,7 @@ export class FlowScene extends Phaser.Scene {
       }).setOrigin(0.5);
       c.add([bg, txt]);
       c.setSize(w, h);
-      c.setInteractive(new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h), Phaser.Geom.Rectangle.Contains);
-      c.on('pointerdown', onClick);
+      this.registerButton(c, w, h, onClick);
       return c;
     };
 
