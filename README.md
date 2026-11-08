@@ -6,7 +6,7 @@
 
 | 网页端 | 微信小游戏 |
 | --- | --- |
-| `npm start` → http://localhost:8080 | 微信开发者工具导入本目录（`compileType: game`） |
+| 在线试玩 <https://tianyubabg.github.io/SugarFrost/> · 本地 `npm start` → http://localhost:8080 | 微信开发者工具导入本目录（`compileType: game`） |
 
 ## 玩法
 
