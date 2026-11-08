@@ -399,6 +399,7 @@ export class FlowScene extends Phaser.Scene {
   }
 
   guideNext() {
+    if (this.drag) return; // 玩家正在拖时别让手圈来抢戏
     const next = this.puzzle.paths.find((p) => !this.completed.has(p.color));
     if (!next) return;
     this.playHand(next.color, next.cells.slice(0, 6));
@@ -449,8 +450,7 @@ export class FlowScene extends Phaser.Scene {
             if (this.hand === hand) this.hand = null;
             this.time.delayedCall(520, () => {
               if (token !== this.handToken || !this.tutorial || this.status !== 'playing') return;
-              const next = this.puzzle.paths.find((p) => !this.completed.has(p.color));
-              if (next) this.playHand(next.color, next.cells.slice(0, 6));
+              this.guideNext();
             });
           },
         });
