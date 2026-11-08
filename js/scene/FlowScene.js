@@ -8,6 +8,7 @@
 // 生成器保证每关有解（先造解、再藏解），见 js/core/flow.js。
 
 import { SYRUPS, cellId, levelConfig, generatePuzzle, isSolved, neighbors } from '../core/flow.js';
+import { tutorialPuzzle } from '../core/tutorial.js';
 import { bakeEnvironment, PANEL_TEX_W, PANEL_TEX_H } from '../art/EnvironmentArt.js';
 import { bakeFlowTextures, syrupOf } from '../art/FlowArt.js';
 import { PALETTE, hex } from '../art/palette.js';
@@ -20,6 +21,7 @@ const BOARD_MAX_H = 720;
 const BOARD_MARGIN = 46;
 const HUD_SAFE = 90;
 const LEVEL_KEY = 'sugarfrost.flow.level';
+const TUTORIAL_KEY = 'sugarfrost.flow.tutorial';
 
 const TITLE_FONT = '"Comic Sans MS", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';
 
@@ -33,6 +35,8 @@ export class FlowScene extends Phaser.Scene {
     this.offsetX = 0;
     this.offsetY = Math.max(0, (HEIGHT - LOGICAL_H * this.uiScale) / 2);
     this.startLevel = data && data.level ? data.level : null;
+    this.forceTutorial = !!(data && data.tutorial);
+    this.handToken = 0;
   }
 
   // ──────────────── 坐标 ────────────────
@@ -44,8 +48,15 @@ export class FlowScene extends Phaser.Scene {
     bakeEnvironment(this);
 
     const params = this.readParams();
-    this.level = this.startLevel || Number(params.get('level')) || Number(this.loadLevel()) || 1;
+    const saved = this.hasSavedLevel() ? (Number(this.loadLevel()) || 1) : 0;
+    this.level = this.startLevel || Number(params.get('level')) || saved || 1;
     this.seedBase = Number(params.get('seed')) || 20261108;
+
+    // 新用户（没通关记录、没指定关卡）默认先看演示
+    this.tutorial = this.forceTutorial
+      || params.get('tutorial') === '1'
+      || (!this.startLevel && !params.get('level') && !saved && !this.tutorialDone());
+    if (this.tutorial) this.level = 0;
 
     this.buildStatic();
     this.buildLevel();
@@ -58,11 +69,31 @@ export class FlowScene extends Phaser.Scene {
     if (typeof window !== 'undefined') window.__flow = this;
   }
 
+  tutorialDone() {
+    try {
+      if (typeof localStorage !== 'undefined') return localStorage.getItem(TUTORIAL_KEY) === '1';
+    } catch (e) { /* 隐私模式忽略 */ }
+    return false;
+  }
+
+  markTutorialDone() {
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(TUTORIAL_KEY, '1');
+    } catch (e) { /* 忽略 */ }
+  }
+
   readParams() {
     if (typeof window !== 'undefined' && window.location && typeof URLSearchParams !== 'undefined') {
       return new URLSearchParams(window.location.search);
     }
     return new Map();
+  }
+
+  hasSavedLevel() {
+    try {
+      if (typeof localStorage !== 'undefined') return localStorage.getItem(LEVEL_KEY) !== null;
+    } catch (e) { /* 忽略 */ }
+    return false;
   }
 
   loadLevel() {
@@ -89,7 +120,9 @@ export class FlowScene extends Phaser.Scene {
   }
 
   buildLevel() {
-    this.puzzle = generatePuzzle(this.seedBase + this.level * 7919, { level: this.level });
+    this.puzzle = this.tutorial
+      ? tutorialPuzzle()
+      : generatePuzzle(this.seedBase + this.level * 7919, { level: this.level });
     const p = this.puzzle;
     this.w = p.w;
     this.h = p.h;
@@ -134,6 +167,7 @@ export class FlowScene extends Phaser.Scene {
     this.drawPipes();
     this.buildHUD();
     this.refreshHUD();
+    if (this.tutorial) this.startTutorial();
   }
 
   centerOf(cell) {
@@ -227,9 +261,9 @@ export class FlowScene extends Phaser.Scene {
       }
 
       // 高光：只在左上侧一条细亮线，别盖住管道中心
-      const hiW = this.cell * 0.18;
-      const hi = pts.map((p) => ({ x: p.x - width * 0.2, y: p.y - width * 0.26 }));
-      g.lineStyle(hiW, 0xffffff, 0.42);
+      const hiW = this.cell * 0.12;
+      const hi = pts.map((p) => ({ x: p.x - width * 0.24, y: p.y - width * 0.24 }));
+      g.lineStyle(hiW, 0xffffff, 0.32);
       this.strokeChain(g, hi);
     }
   }
@@ -268,15 +302,47 @@ export class FlowScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(80);
     items.push(this.statusText);
 
-    this.hintText = this.add.text(WIDTH / 2, safe + this.s(118), '从端点拖到另一端 · 填满所有格子', {
-      fontFamily: TITLE_FONT,
-      fontSize: `${Math.round(this.s(19))}px`,
-      color: hex(PALETTE.inkSoft),
-    }).setOrigin(0.5).setDepth(80);
+    this.hintText = this.add.text(
+      WIDTH / 2,
+      safe + this.s(118),
+      this.tutorial ? '演示关：跟着白圈拖一次就会了' : '从端点拖到另一端 · 填满所有格子',
+      {
+        fontFamily: TITLE_FONT,
+        fontSize: `${Math.round(this.s(19))}px`,
+        color: hex(PALETTE.inkSoft),
+      },
+    ).setOrigin(0.5).setDepth(80);
     items.push(this.hintText);
 
     this.hudItems = items;
     this.buildBottomBar();
+    this.buildCornerButton();
+  }
+
+  buildCornerButton() {
+    const label = this.tutorial ? '跳过演示' : '看演示';
+    const x = WIDTH - this.s(84);
+    const y = this.sy(HUD_SAFE + 6);
+    const c = this.add.container(x, y).setDepth(85);
+    const w = this.s(120);
+    const h = this.s(46);
+    const bg = this.add.graphics();
+    bg.fillStyle(PALETTE.white, 0.62);
+    bg.fillRoundedRect(-w / 2, -h / 2, w, h, h / 2);
+    const txt = this.add.text(0, 0, label, {
+      fontFamily: TITLE_FONT,
+      fontSize: `${Math.round(this.s(19))}px`,
+      color: hex(PALETTE.inkSoft),
+    }).setOrigin(0.5);
+    c.add([bg, txt]);
+    c.setSize(w, h);
+    c.setInteractive(new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h), Phaser.Geom.Rectangle.Contains);
+    c.on('pointerdown', (pointer, px, py, event) => {
+      if (event && event.stopPropagation) event.stopPropagation();
+      if (this.tutorial) this.leaveTutorial();
+      else this.scene.restart({ tutorial: true });
+    });
+    this.cornerBtn = c;
   }
 
   buildBottomBar() {
@@ -315,10 +381,162 @@ export class FlowScene extends Phaser.Scene {
     if (!this.statusText) return;
     const done = this.completed.size;
     const total = this.puzzle.paths.length;
+    if (this.tutorial) {
+      this.statusText.setText(`新手演示 · 已连通 ${done}/${total}`);
+      return;
+    }
     const frozen = this.frost.filter((f) => f.layers > 0).length;
     this.statusText.setText(
       `第 ${this.level} 关 · 已连通 ${done}/${total}${frozen ? ` · 冰封 ${frozen}` : ''}`,
     );
+  }
+
+  // ──────────────── 新手演示 ────────────────
+  startTutorial() {
+    if (this.barItems) this.barItems.forEach((o) => o.setVisible(false));
+    this.showBubble('按住粉色圆点，一路拖到底');
+    this.guideNext();
+  }
+
+  guideNext() {
+    const next = this.puzzle.paths.find((p) => !this.completed.has(p.color));
+    if (!next) return;
+    this.playHand(next.color, next.cells.slice(0, 6));
+  }
+
+  playHand(color, cells) {
+    this.stopHand();
+    if (!cells.length) return;
+    const token = this.handToken;
+    const pts = cells.map((c) => this.centerOf(c));
+    const hand = this.add.container(pts[0].x, pts[0].y).setDepth(210);
+    const g = this.add.graphics();
+    const r = this.s(26);
+    g.fillStyle(0xffffff, 0.55);
+    g.fillCircle(0, 0, r);
+    g.lineStyle(Math.max(2, this.s(3)), 0xffffff, 0.95);
+    g.strokeCircle(0, 0, r);
+    g.fillStyle(syrupOf(color).color, 0.9);
+    g.fillCircle(0, 0, r * 0.32);
+    hand.add(g);
+    hand.setAlpha(0);
+    this.hand = hand;
+    this.handSpec = { color, cells };
+    this.tweens.add({ targets: hand, alpha: 1, duration: 200 });
+
+    this.handTween = this.tweens.addCounter({
+      from: 0,
+      to: Math.max(1, pts.length - 1),
+      duration: 380 * Math.max(1, pts.length - 1),
+      onUpdate: (tw) => {
+        if (token !== this.handToken || !hand.active) return;
+        const v = tw.getValue();
+        const i = Math.min(pts.length - 2, Math.floor(v));
+        const f = v - i;
+        const a = pts[i];
+        const b = pts[i + 1] || a;
+        hand.setPosition(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f);
+      },
+      onComplete: () => {
+        if (token !== this.handToken || !hand.active) return;
+        this.tweens.add({
+          targets: hand,
+          alpha: 0,
+          duration: 240,
+          onComplete: () => {
+            if (token !== this.handToken) return;
+            hand.destroy();
+            if (this.hand === hand) this.hand = null;
+            this.time.delayedCall(520, () => {
+              if (token !== this.handToken || !this.tutorial || this.status !== 'playing') return;
+              const next = this.puzzle.paths.find((p) => !this.completed.has(p.color));
+              if (next) this.playHand(next.color, next.cells.slice(0, 6));
+            });
+          },
+        });
+      },
+    });
+  }
+
+  stopHand() {
+    this.handToken += 1;
+    const t = this.handTween;
+    this.handTween = null;
+    if (t) {
+      try { t.remove(); } catch (e) { /* 计数 tween 可能已结束并被回收 */ }
+    }
+    if (this.hand) {
+      this.hand.destroy();
+      this.hand = null;
+    }
+  }
+
+  showBubble(text) {
+    if (!this.bubble) {
+      this.bubble = this.add.container(WIDTH / 2, this.sy(1064)).setDepth(200);
+      this.bubbleBg = this.add.graphics();
+      this.bubbleText = this.add.text(0, 0, '', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${Math.round(this.s(24))}px`,
+        color: hex(PALETTE.ink),
+        align: 'center',
+        wordWrap: { width: this.s(560) },
+      }).setOrigin(0.5);
+      this.bubble.add([this.bubbleBg, this.bubbleText]);
+    }
+    this.bubbleText.setText(text);
+    const w = Math.min(this.s(640), this.bubbleText.width + this.s(64));
+    const h = this.bubbleText.height + this.s(40);
+    this.bubbleBg.clear();
+    this.bubbleBg.fillStyle(PALETTE.white, 0.95);
+    this.bubbleBg.fillRoundedRect(-w / 2, -h / 2, w, h, this.s(22));
+    this.bubbleBg.lineStyle(Math.max(1, this.s(2)), PALETTE.cardOutline, 0.85);
+    this.bubbleBg.strokeRoundedRect(-w / 2, -h / 2, w, h, this.s(22));
+    this.bubble.setVisible(true);
+    if (this.bubble.alpha < 1) this.tweens.add({ targets: this.bubble, alpha: 1, duration: 160 });
+  }
+
+  tutorialStepDone() {
+    const remaining = this.puzzle.paths.filter((p) => !this.completed.has(p.color));
+    if (remaining.length === 0) {
+      this.stopHand();
+      this.showBubble('全部格子填满 → 过关！');
+      this.time.delayedCall(760, () => this.showTutorialDone());
+      return;
+    }
+    this.showBubble(this.completed.size === 1
+      ? '就是这样！再来一条：拐弯也能连'
+      : '继续把同色圆点连起来');
+    this.stopHand();
+    this.time.delayedCall(520, () => this.guideNext());
+  }
+
+  showTutorialDone() {
+    if (this.tutorialPanel) return;
+    const c = this.add.container(WIDTH / 2, this.sy(1188)).setDepth(220);
+    const w = this.s(300);
+    const h = this.s(74);
+    const bg = this.add.graphics();
+    bg.fillStyle(PALETTE.gold, 1);
+    bg.fillRoundedRect(-w / 2, -h / 2, w, h, h / 2);
+    bg.fillStyle(0xffffff, 0.25);
+    bg.fillRoundedRect(-w / 2 + this.s(8), -h / 2 + this.s(6), w - this.s(16), h * 0.4, h * 0.2);
+    const txt = this.add.text(0, 0, '开始第 1 关', {
+      fontFamily: TITLE_FONT,
+      fontSize: `${Math.round(this.s(28))}px`,
+      fontStyle: 'bold',
+      color: hex(PALETTE.white),
+    }).setOrigin(0.5);
+    c.add([bg, txt]);
+    c.setSize(w, h);
+    c.setInteractive(new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h), Phaser.Geom.Rectangle.Contains);
+    c.on('pointerdown', () => this.leaveTutorial());
+    this.tutorialPanel = c;
+  }
+
+  leaveTutorial() {
+    this.markTutorialDone();
+    this.scene.restart({ level: 1 });
   }
 
   // ──────────────── 输入 ────────────────
@@ -335,6 +553,11 @@ export class FlowScene extends Phaser.Scene {
     if (this.status !== 'playing') return;
     const cell = this.cellAt(pointer);
     if (!cell) return;
+
+    if (this.tutorial) {
+      this.stopHand();
+      if (this.completed.size === 0) this.showBubble('按住别松手，顺着格子慢慢拖');
+    }
 
     if (this.isFrozen(cell)) {
       this.flashFrost(cell);
@@ -444,6 +667,10 @@ export class FlowScene extends Phaser.Scene {
     this.sparkle(stroke);
     this.drawEndpoints();
     this.refreshHUD();
+    if (this.tutorial) {
+      this.tutorialStepDone();
+      return;
+    }
     this.checkWin();
   }
 
@@ -506,6 +733,7 @@ export class FlowScene extends Phaser.Scene {
 
   // ──────────────── 结算 ────────────────
   checkWin() {
+    if (this.tutorial) return;
     if (!isSolved(this.puzzle, this.fill)) return;
     this.status = 'done';
     this.saveLevel(this.level + 1);
