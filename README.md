@@ -85,7 +85,7 @@ npm run selftest     # 规则 / 生成器 / 糖霜 64 项自测
 npm run solve        # 策略胜率评估
 npm run flow         # 糖浆管道逻辑自测
 npm run flow-check   # 糖浆管道拖拽实测（需要本机 Chrome）
-npm run qa           # 糖浆管道全面自测（60 项：布局 × 触碰 × 逐关 × wx 分支）
+npm run qa           # 糖浆管道全面自测（62 项：布局 × 触碰 × 逐关 × wx 分支）
 
 # 浏览器端到端（需要本机 Chrome）
 node tools/browser-check.mjs   # 点牌 / 融霜 / 胜利 / 失败 / 重开
@@ -134,7 +134,7 @@ node tools/playthrough.mjs     # 照解序真实点击 108 次，端到端验证
 
 ### 全面自测（`npm run qa`）
 
-`tools/flow-qa.mjs` 用真实手指事件（`page.touchscreen`，不是鼠标）跑 60 项断言：
+`tools/flow-qa.mjs` 用真实手指事件（`page.touchscreen`，不是鼠标）跑 62 项断言：
 
 | 组 | 覆盖 |
 | --- | --- |

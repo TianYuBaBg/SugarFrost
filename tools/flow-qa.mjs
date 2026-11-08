@@ -96,10 +96,13 @@ const state = (page) =>
 // 触碰拖拽：从 cells[0] 沿路径单元格滑到最后一个（按 CSS 像素）
 async function touchDragPath(page, cells) {
   const pts = await page.evaluate(
-    (cs) => cs.map((c) => {
-      const q = window.__flow.centerOf(c);
-      return { x: q.x / window.devicePixelRatio, y: q.y / window.devicePixelRatio };
-    }),
+    (cs) => {
+      const r = document.querySelector('canvas').getBoundingClientRect();
+      return cs.map((c) => {
+        const q = window.__flow.centerOf(c);
+        return { x: r.left + q.x / window.devicePixelRatio, y: r.top + q.y / window.devicePixelRatio };
+      });
+    },
     cells,
   );
   const p0 = pts[0];
@@ -111,7 +114,7 @@ async function touchDragPath(page, cells) {
     // 每格之间插值两步，模拟真实手指速度
     for (const t of [0.5, 1]) {
       await page.touchscreen.touchMove(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
-      await sleep(12);
+      await sleep(18);
     }
   }
   await page.touchscreen.touchEnd();
@@ -184,6 +187,17 @@ async function run() {
       check(`布局 ${w}×${h}@${dpr}：无报错`, errors.length === 0, errors[0] || '');
       check(`布局 ${w}×${h}@${dpr}：新访客进演示关`, st.tutorial && st.w === 4, `tutorial=${st.tutorial} ${st.w}×${st.h}`);
       await page.screenshot({ path: `.tmp/qa-${w}x${h}.png` });
+      await ctx.close();
+    }
+
+    // ---------- 1.5 极端尺寸下拖拽也要准 ----------
+    for (const [w, h, dpr] of [[360, 640, 2], [768, 1024, 2]]) {
+      const { page, ctx } = await newPage(browser, { width: w, height: h, dpr });
+      await openFlow(page);
+      const cells = await page.evaluate(() => window.__flow.puzzle.paths[0].cells);
+      await touchDragPath(page, cells);
+      const st = await state(page);
+      check(`${w}×${h} 拖动坐标准确`, st.completed.length === 1 && st.fill === cells.length, `completed=${st.completed} fill=${st.fill}/${cells.length}`);
       await ctx.close();
     }
 
