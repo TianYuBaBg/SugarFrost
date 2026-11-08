@@ -200,20 +200,22 @@ export class FlowScene extends Phaser.Scene {
     const g = this.pipeG;
     g.clear();
 
-    const width = this.cell * 0.38;
+    const width = this.cell * 0.58;
     const r = width / 2;
+    const drop = this.s(2.2);
 
     for (const [color, stroke] of this.strokes) {
       if (!stroke.cells.length) continue;
       const syrup = syrupOf(color);
       const pts = stroke.cells.map((c) => this.centerOf(c));
 
-      // 阴影
-      g.lineStyle(width * 1.14, syrup.deep, 0.22);
-      this.strokeChain(g, pts);
-      for (const p of pts) {
-        g.fillStyle(syrup.deep, 0.22);
-        g.fillCircle(p.x, p.y + this.s(1.5), r * 1.07);
+      // 投影
+      const sh = pts.map((p) => ({ x: p.x, y: p.y + drop }));
+      g.lineStyle(width * 1.02, syrup.deep, 0.16);
+      this.strokeChain(g, sh);
+      for (const p of sh) {
+        g.fillStyle(syrup.deep, 0.16);
+        g.fillCircle(p.x, p.y, r * 1.02);
       }
 
       // 主体
@@ -224,15 +226,11 @@ export class FlowScene extends Phaser.Scene {
         g.fillCircle(p.x, p.y, r);
       }
 
-      // 高光
-      const off = -width * 0.17;
-      g.lineStyle(width * 0.34, 0xffffff, 0.45);
-      const hi = pts.map((p) => ({ x: p.x - width * 0.14, y: p.y + off }));
+      // 高光：只在左上侧一条细亮线，别盖住管道中心
+      const hiW = this.cell * 0.14;
+      const hi = pts.map((p) => ({ x: p.x - width * 0.2, y: p.y - width * 0.26 }));
+      g.lineStyle(hiW, 0xffffff, 0.5);
       this.strokeChain(g, hi);
-      for (const p of hi) {
-        g.fillStyle(0xffffff, 0.4);
-        g.fillCircle(p.x, p.y, width * 0.17);
-      }
     }
   }
 
