@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#FDF1F7" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23FFFDFB'/%3E%3Cpath d='M8 22c0-8 8-12 16-12' fill='none' stroke='%23FF86A8' stroke-width='5' stroke-linecap='round'/%3E%3Ccircle cx='8' cy='22' r='4' fill='%2363D6B4'/%3E%3C/svg%3E" />
+  <title>糖浆管道 · SugarFrost Flow</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #fdf1f7;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    body { display: flex; align-items: center; justify-content: center; }
+    canvas { display: block; touch-action: none; }
+  </style>
+  <script src="js/libs/phaser.min.js"></script>
+</head>
+<body>
+  <div id="phaser-example"></div>
+  <script type="module">
+    import { FlowMain } from './js/flow-main.js';
+    new FlowMain();
+  </script>
+</body>
+</html>

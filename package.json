@@ -2,19 +2,23 @@
   "name": "sugarfrost",
   "version": "1.0.0",
   "private": true,
-  "description": "糖霜消消 · 微信小游戏 / 网页双端三消堆叠游戏",
+  "description": "糖霜消消（微信小游戏/网页三消堆叠）+ 糖浆管道（连线解谜实验）",
   "type": "module",
   "scripts": {
     "start": "node tools/serve.mjs",
     "selftest": "node tools/selftest.mjs",
     "solve": "node tools/solver.mjs 20",
     "check": "node tools/browser-check.mjs",
-    "play": "node tools/playthrough.mjs"
+    "play": "node tools/playthrough.mjs",
+    "flow": "node tools/flow-selftest.mjs",
+    "flow-check": "node tools/flow-check.mjs"
   },
   "keywords": [
     "phaser3",
     "wechat-minigame",
-    "match-3"
+    "match-3",
+    "puzzle",
+    "flow"
   ],
   "license": "MIT",
   "devDependencies": {
