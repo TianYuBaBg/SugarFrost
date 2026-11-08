@@ -169,6 +169,11 @@ export class FlowScene extends Phaser.Scene {
 
   // 按钮统一走场景级命中测试：Phaser 的 GameObject 命中在小游戏端偶发不响应，
   // 而场景 pointerdown 一直是可靠的（拖管道本身就是这么做的）
+  restartScene(data) {
+    this.buttons = [];
+    this.time.delayedCall(24, () => this.scene.restart(data));
+  }
+
   registerButton(container, w, h, onClick) {
     this.buttons.push({ c: container, w, h, onClick });
   }
@@ -346,7 +351,7 @@ export class FlowScene extends Phaser.Scene {
     c.setSize(w, h);
     this.registerButton(c, w, h, () => {
       if (this.tutorial) this.leaveTutorial();
-      else this.scene.restart({ tutorial: true });
+      else this.restartScene({ tutorial: true });
     });
     this.cornerBtn = c;
   }
@@ -540,7 +545,7 @@ export class FlowScene extends Phaser.Scene {
 
   leaveTutorial() {
     this.markTutorialDone();
-    this.scene.restart({ level: 1 });
+    this.restartScene({ level: 1 });
   }
 
   // ──────────────── 输入 ────────────────
@@ -852,10 +857,10 @@ export class FlowScene extends Phaser.Scene {
 
     makeBtn(-118, '下一关', () => {
       this.startLevel = this.level + 1;
-      this.scene.restart({ level: this.level + 1 });
+      this.restartScene({ level: this.level + 1 });
     });
     makeBtn(118, '再来一局', () => {
-      this.scene.restart({ level: this.level });
+      this.restartScene({ level: this.level });
     });
   }
 
