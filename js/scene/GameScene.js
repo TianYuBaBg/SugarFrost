@@ -61,9 +61,10 @@ export class GameScene extends Phaser.Scene {
     bakeEnvironment(this);
 
     // ?seed=123456 可复现同一局（调试 / 每日挑战都用得上）
-    const seedParam = typeof window !== 'undefined' && window.location
-      ? Number(new URLSearchParams(window.location.search).get('seed'))
-      : 0;
+    let seedParam = 0;
+    if (typeof window !== 'undefined' && window.location && typeof URLSearchParams !== 'undefined') {
+      seedParam = Number(new URLSearchParams(window.location.search).get('seed'));
+    }
     this.level = generateLevel(seedParam > 0 ? seedParam : Date.now());
     this.cards = this.level.cards.map((c) => ({ ...c, state: 'on_pile', unlocked: false, sprite: null, frost: null }));
     this.slot = [];

@@ -27,6 +27,20 @@
   "appid": "touristappid",
   "projectname": "SugarFrost",
   "condition": {},
-  "packOptions": { "ignore": [], "include": [] },
+  "packOptions": {
+    "ignore": [
+      { "type": "folder", "value": "tools" },
+      { "type": "folder", "value": "docs" },
+      { "type": "folder", "value": "node_modules" },
+      { "type": "folder", "value": ".tmp" },
+      { "type": "file", "value": "package.json" },
+      { "type": "file", "value": "package-lock.json" },
+      { "type": "file", "value": "README.md" },
+      { "type": "file", "value": "index.html" },
+      { "type": "file", "value": ".gitattributes" },
+      { "type": "file", "value": ".gitignore" }
+    ],
+    "include": []
+  },
   "editorSetting": { "tabIndent": "insertSpaces", "tabSize": 2 }
 }
