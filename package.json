@@ -13,7 +13,8 @@
     "wx:open": "\"/c/Program Files (x86)/Tencent/微信web开发者工具/cli.bat\" open --project .",
     "wx:preview": "\"/c/Program Files (x86)/Tencent/微信web开发者工具/cli.bat\" preview --project . --qr-output .tmp/wx-preview.png",
     "flow": "node tools/flow-selftest.mjs",
-    "flow-check": "node tools/flow-check.mjs"
+    "flow-check": "node tools/flow-check.mjs",
+    "qa": "node tools/flow-qa.mjs"
   },
   "keywords": [
     "phaser3",

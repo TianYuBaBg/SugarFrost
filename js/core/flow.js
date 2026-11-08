@@ -231,7 +231,8 @@ function tryGenerate(rng, cfg) {
     colors,
     paths,
     frost,
-    order: null,
+    // 供测试/提示使用的合法落笔顺序（冰封会限制先后）
+    order: solveOrder(paths, frost),
   };
 }
 

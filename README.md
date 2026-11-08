@@ -72,6 +72,7 @@ tools/
   playthrough.mjs    # 照解序真实点击 108 次，端到端验证通关
   flow-selftest.mjs  # 糖浆管道逻辑自测（1216 项）
   flow-check.mjs     # 糖浆管道 puppeteer 真实拖拽
+  flow-qa.mjs        # 糖浆管道全面自测（多机型布局 / 触碰输入 / 逐关通关 / wx 分支）
 docs/superpowers/specs/2026-11-08-sugarfrost-design.md              # 设计文档
 docs/superpowers/specs/2026-11-08-sugarfrost-frost-mechanic-design.md # 糖霜机制设计
 ```
@@ -84,6 +85,7 @@ npm run selftest     # 规则 / 生成器 / 糖霜 64 项自测
 npm run solve        # 策略胜率评估
 npm run flow         # 糖浆管道逻辑自测
 npm run flow-check   # 糖浆管道拖拽实测（需要本机 Chrome）
+npm run qa           # 糖浆管道全面自测（60 项：布局 × 触碰 × 逐关 × wx 分支）
 
 # 浏览器端到端（需要本机 Chrome）
 node tools/browser-check.mjs   # 点牌 / 融霜 / 胜利 / 失败 / 重开
@@ -128,7 +130,23 @@ node tools/playthrough.mjs     # 照解序真实点击 108 次，端到端验证
 | `tools/flow-selftest.mjs` | 纯逻辑自测：合法性 / 每关有解 / 结霜可解 / 同 seed 确定性 |
 | `tools/flow-check.mjs` | puppeteer：按解序拖完通关、冰封点不动、画到旁边会解冻、下一关、重来 |
 
-> 目前这个原型只挂了网页入口；微信小游戏侧仍是糖霜消消（`compileType: game`，入口 `game.js`）。
+小游戏入口由 `js/game-mode.js` 决定：`MODE = 'flow'` 启动糖浆管道，`'frost'` 启动糖霜消消。存档走 `js/storage.js`（小游戏 `wx.setStorageSync`、浏览器 `localStorage`），两端行为一致。
+
+### 全面自测（`npm run qa`）
+
+`tools/flow-qa.mjs` 用真实手指事件（`page.touchscreen`，不是鼠标）跑 60 项断言：
+
+| 组 | 覆盖 |
+| --- | --- |
+| 布局 | 360×640 / 390×844 / 412×915 / 430×932 / 768×1024 五种屏：棋盘完整在屏内、零报错 |
+| 新手演示 | 新访客自动进入 → 拖完两条线 → 点「开始第 1 关」进第 1 关 |
+| 逐关通关 | 第 1/5/9/12/16/18/24/25/31/40 关：按解序拖通、判定 done、冰封被融化 |
+| 关卡推进 | 结算面板「下一关」；通关后重开网页续到该关（存档） |
+| 冰封 | 点冰封端点不落子 |
+| 撤销 / 重来 | 撤销清最后一条、重来清全场 |
+| wx 分支 | 注入伪 `wx`（getSystemInfoSync / storage）：canvas 跟随视口、存档只写 wx storage |
+
+> 已知坑（已修）：`js/libs/phaser.min.js` 是小游戏特化构建，`onTouchMove` 里有一句裸的 `if (wx && !document.elementFromPoint)`。浏览器里一旦有触摸滑动就会抛 `wx is not defined`，导致**手指拖动整条失效**（鼠标反而正常）。已在该文件里给 `wx` 加 `typeof` 守卫，改的是这一个表达式，其余逻辑不动。
 
 ## License
 
