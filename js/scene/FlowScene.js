@@ -375,8 +375,11 @@ export class FlowScene extends Phaser.Scene {
       return;
     }
     const frozen = this.frost.filter((f) => f.layers > 0).length;
+    const cells = this.w * this.h;
+    // 「填满格子」才是通关条件，所以把格子数也摆出来，光看管道数会被误导向
     this.statusText.setText(
-      `第 ${this.level} 关 · 已连通 ${done}/${total}${frozen ? ` · 冰封 ${frozen}` : ''}`,
+      `第 ${this.level} 关 · 管道 ${done}/${total} · 格子 ${this.fill.size}/${cells}`
+        + (frozen ? ` · 冰封 ${frozen}` : ''),
     );
   }
 
@@ -546,6 +549,8 @@ export class FlowScene extends Phaser.Scene {
     if (this.tutorial) {
       this.stopHand();
       if (this.completed.size === 0) this.showBubble('按住别松手，顺着格子慢慢拖');
+    } else {
+      this.clearGapHint();
     }
 
     if (this.isFrozen(cell)) {
@@ -574,6 +579,7 @@ export class FlowScene extends Phaser.Scene {
   }
 
   startStroke(color, cell) {
+    this.clearGapHint();
     // 该色若已有未完成路径，清空重来
     const old = this.strokes.get(color);
     if (old) {
@@ -590,6 +596,7 @@ export class FlowScene extends Phaser.Scene {
 
   handleMove(pointer) {
     if (!this.drag || this.status !== 'playing') return;
+    if (this.completed.has(this.drag.color)) return; // 已经连通的管道不再延伸
     const stroke = this.strokes.get(this.drag.color);
     if (!stroke) return;
     const target = this.cellAt(pointer);
@@ -652,6 +659,8 @@ export class FlowScene extends Phaser.Scene {
   }
 
   finishStroke(stroke) {
+    this.drag = null; // 连到端点就撒手：后续 pointermove 不能再把管道拖出端点外
+    this.clearGapHint();
     this.completed.add(stroke.color);
     this.sparkle(stroke);
     this.drawEndpoints();
@@ -720,10 +729,63 @@ export class FlowScene extends Phaser.Scene {
     });
   }
 
+  // ──────────────── 没填满的提示 ────────────────
+  unfilledCells() {
+    const out = [];
+    for (let y = 0; y < this.h; y += 1) {
+      for (let x = 0; x < this.w; x += 1) {
+        if (this.fill.get(cellId(x, y)) === undefined) out.push({ x, y });
+      }
+    }
+    return out;
+  }
+
+  showGapHint() {
+    const gaps = this.unfilledCells();
+    if (!gaps.length) return;
+    this.clearGapHint();
+
+    const g = this.add.graphics().setDepth(24);
+    const inset = this.cell * 0.16;
+    for (const c of gaps) {
+      const x = this.sx(this.boardX + c.x * this.cell) + inset;
+      const y = this.sy(this.boardY + c.y * this.cell) + inset;
+      g.lineStyle(Math.max(2, this.s(3)), 0xf08fb0, 0.95);
+      g.strokeRoundedRect(x, y, this.cell - inset * 2, this.cell - inset * 2, this.cell * 0.2);
+    }
+    this.gapLayer = g;
+    this.gapTween = this.tweens.add({
+      targets: g,
+      alpha: { from: 1, to: 0.35 },
+      duration: 560,
+      yoyo: true,
+      repeat: -1,
+    });
+    this.showBubble(`管道都通了，还差 ${gaps.length} 格 · 点端点可以重画`);
+    console.warn('[flow] 已全部连通但未填满，空格：', gaps.map((c) => `${c.x},${c.y}`).join(' '));
+  }
+
+  clearGapHint() {
+    if (this.gapTween) {
+      this.gapTween.remove();
+      this.gapTween = null;
+    }
+    if (this.gapLayer) {
+      this.gapLayer.destroy();
+      this.gapLayer = null;
+    }
+    if (this.bubble && !this.tutorial) this.bubble.setVisible(false);
+  }
+
   // ──────────────── 结算 ────────────────
   checkWin() {
     if (this.tutorial) return;
-    if (!isSolved(this.puzzle, this.fill)) return;
+    if (!isSolved(this.puzzle, this.fill)) {
+      // 三条都连上了但没填满：把空出来的格子标出来，别让玩家干瞪眼
+      if (this.completed.size === this.puzzle.paths.length) this.showGapHint();
+      return;
+    }
+    this.clearGapHint();
     this.status = 'done';
     this.saveLevel(this.level + 1);
     this.time.delayedCall(220, () => this.showPanel());
